@@ -2,7 +2,6 @@
 
 import argparse, cgi, enum, getpass, os
 import requests # pip install requests
-import dateutil.parser, dateutil.tz # pip install python-dateutil
 
 DOMAIN = 'https://app.bloomz.net/'
 LOGIN_URI = DOMAIN + 'api/user/login?authType=bloomz'
@@ -105,23 +104,7 @@ class Client:
     def dlalbum(self, args, albumid):
         for p in self.itercollection(DOMAIN + 'api/v2/'+albumid+'/photos'):
             guid = p['id']
-            if args.start or args.end:
-                # check timestamp against desired date range
-                # FIXME: this doesn't actually work, because every photo has a
-                # bogus (current?) createddatetime and updateddatetime field
-                details = self.getdetails(guid)
-                ts = dateutil.parser.parse(details['updateddatetime'])
-                if (args.start and ts < args.start) or (args.end and ts >= args.end):
-                    print('Skipped', guid, 'due to timestamp', ts)
-                    continue
             self.dlphoto(args, guid)
-
-def parse_date(s):
-    dt = dateutil.parser.parse(s)
-    if dt.tzinfo is None:
-        # default to local timezone
-        return dt.replace(tzinfo=dateutil.tz.tzlocal())
-    return dt
 
 def parseargs():
     p = argparse.ArgumentParser(description='Download tool for photo albums on Bloomz')
@@ -131,10 +114,6 @@ def parseargs():
                    help='Password (default: prompt)')
     p.add_argument('-o', '--outdir', metavar='DIR', dest='outdir',
                    help='Directory to write images (default: CWD)')
-    p.add_argument('--start', metavar='DATE', type=parse_date,
-                   help='Download only images later than DATE')
-    p.add_argument('--end', metavar='DATE', type=parse_date,
-                   help='Download only images prior to DATE')
     p.add_argument('--dups', type=DuplicateAction, choices=DuplicateAction,
                    help='What to do with duplicate filenames (default: rename)',
                    default=DuplicateAction.RENAME)
