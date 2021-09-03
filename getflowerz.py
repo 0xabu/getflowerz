@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse, cgi, enum, getpass, os
+from typing import Any, Iterator, Optional
 import requests # pip install requests
 
 DOMAIN = 'https://app.bloomz.net/'
@@ -16,18 +17,18 @@ class DuplicateAction(enum.Enum):
         return self.value
 
 class Client:
-    def __init__(self, session):
+    def __init__(self, session: requests.Session):
         self.session = session
 
     @staticmethod
-    def parse_response(request):
+    def parse_response(request: requests.Response):
         request.raise_for_status()
         j = request.json()
         if j['status'] != 'success':
             raise RuntimeError('API call failed: ' + j['status'])
         return j['data']
 
-    def dologin(self, username, password):
+    def dologin(self, username: str, password: str):
         r = self.session.get(DOMAIN)
         r.raise_for_status()
         self.session.headers['X-Xsrftoken'] = r.cookies['_xsrf']
@@ -36,11 +37,11 @@ class Client:
         r = self.session.post(LOGIN_URI, json=j)
         return self.parse_response(r)
 
-    def dorequest(self, url, params=None):
+    def dorequest(self, url: str, params=None):
         r = self.session.get(url, params=params)
         return self.parse_response(r)
 
-    def itercollection(self, url):
+    def itercollection(self, url: str) -> Iterator[Any]:
         lastid = None
         while True:
             j = self.dorequest(url, params={'id': lastid})
@@ -50,7 +51,7 @@ class Client:
             yield from l
             lastid = l[-1]['id']
 
-    def lsalbums(self, myid):
+    def lsalbums(self, myid: str) -> None:
         res = self.dorequest(DOMAIN + 'api/' + myid + '/albums')
         fmt = '%-36s %-15s %s'
         print(fmt % ('Album ID', 'Group', 'Description'))
@@ -63,13 +64,13 @@ class Client:
                 extrainfo = ''
             print(fmt % (a['id'], a['albumGroupCategory'], a['title'] + extrainfo))
 
-    def getdetails(self, guid):
+    def getdetails(self, guid: str):
         r = self.session.get(DOMAIN + 'api/v3/media/' + guid + '/details')
         r.raise_for_status()
         return r.json()
 
     @staticmethod
-    def mkfilename(args, filename):
+    def mkfilename(args: argparse.Namespace, filename: str) -> Optional[str]:
         if args.outdir:
             filename = os.path.join(args.outdir, filename)
 
@@ -92,7 +93,7 @@ class Client:
 
         return filename
 
-    def dlphoto(self, args, guid):
+    def dlphoto(self, args: argparse.Namespace, guid: str) -> None:
         with self.session.get(DOWNLOAD_URI + guid, stream=True) as r:
             r.raise_for_status()
             _, params = cgi.parse_header(r.headers['Content-Disposition'])
@@ -101,12 +102,12 @@ class Client:
                 with open(filename, 'wb') as fh:
                     fh.write(r.content)
 
-    def dlalbum(self, args, albumid):
+    def dlalbum(self, args: argparse.Namespace, albumid: str) -> None:
         for p in self.itercollection(DOMAIN + 'api/v2/'+albumid+'/photos'):
             guid = p['id']
             self.dlphoto(args, guid)
 
-def parseargs():
+def parseargs() -> argparse.Namespace:
     p = argparse.ArgumentParser(description='Download tool for photo albums on Bloomz')
     p.add_argument('-u', '--username', metavar='USER', dest='username',
                    required=True, help='Username')
@@ -121,7 +122,7 @@ def parseargs():
                    help='album(s) to download; if none, a listing is printed')
     return p.parse_args()
 
-def main():
+def main() -> None:
     args = parseargs()
     if args.password is None:
         args.password = getpass.getpass()
